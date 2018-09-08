@@ -163,6 +163,12 @@ def on_intent(intent_request, session):
         return handle_session_end_request()
     elif intent_name == "TemperatureIntent":
         return get_temperature(intent, session)
+    elif intent_name == "HumidityIntent":
+        return get_humidity(intent, session)
+    elif intent_name == "PressureIntent":
+        return get_pressure(intent, session)
+    elif intent_name == "AllIntent":
+        return get_all(intent, session)
     else:
         raise ValueError("Invalid intent")
 
@@ -238,23 +244,7 @@ def get_temperature(intent, session):
     """ Gets temperature data from DynamoDB
     """
 
-# --------------- Function that reads records from DynamoDB ------------------
-
-    now = time.time()
-    start = now - (24 * 60 * 60)  # 24 hours
-    now = str(int(now * 1000))
-    start = str(int(start * 1000))
-
-    dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
-    table = dynamodb.Table('SensorData')
-
-    # query latest data
-    res = table.query(
-        KeyConditionExpression=Key('DeviceId').eq("esp32_E67D94") & Key('Timestamp').between(start, now),
-        ScanIndexForward=False,
-        Limit=1
-    )
-
+    res = query()
     session_attributes = {}
 
     if len(res['Items']) is 0:
@@ -267,16 +257,105 @@ def get_temperature(intent, session):
     timestamp = json_obj['Timestamp']
     temperature = json_obj['payload']['Temperature']
     temperature = str(int(temperature))
-    # humidity = json_obj['payload']['Humidity']
-    # humidity = str(int(humidity))
-    # pressure = json_obj['payload']['Pressure']
-    # pressure = str(int(pressure))
 
-    speech_output = 'It\'s ' + temperature + ' degrees celsius'
+    speech_output = 'The temperature is ' + temperature + ' degrees celsius'
     # get formatted date time text from time stamp: 2018-09-03 15:12:10
     date_text = time.strftime('[%Y-%m-%d %H:%M:%S]', time.localtime(int(timestamp) / 1000))
 
     return build_response(session_attributes, build_speech_response(date_text, speech_output))
+
+
+def get_humidity(intent, session):
+    """ Gets humidity data from DynamoDB
+    """
+
+    res = query()
+    session_attributes = {}
+
+    if len(res['Items']) is 0:
+        return build_response(session_attributes, build_no_data_response())
+
+    return_response = max(res["Items"], key=(lambda x: x["Timestamp"]))
+    latest_record = json.dumps(return_response, default=decimal_default)
+
+    json_obj = json.loads(latest_record)
+    timestamp = json_obj['Timestamp']
+    humidity = json_obj['payload']['Humidity']
+    humidity = str(int(humidity))
+
+    speech_output = 'The humidity is ' + humidity + ' percent.'
+    date_text = time.strftime('[%Y-%m-%d %H:%M:%S]', time.localtime(int(timestamp) / 1000))
+
+    return build_response(session_attributes, build_speech_response(date_text, speech_output))
+
+
+def get_pressure(intent, session):
+    """ Gets pressure data from DynamoDB
+    """
+
+    res = query()
+    session_attributes = {}
+
+    if len(res['Items']) is 0:
+        return build_response(session_attributes, build_no_data_response())
+
+    return_response = max(res["Items"], key=(lambda x: x["Timestamp"]))
+    latest_record = json.dumps(return_response, default=decimal_default)
+
+    json_obj = json.loads(latest_record)
+    timestamp = json_obj['Timestamp']
+    pressure = json_obj['payload']['Pressure']
+    pressure = str(int(pressure))
+
+    speech_output = 'The pressure is ' + pressure + ' hPs.'
+    date_text = time.strftime('[%Y-%m-%d %H:%M:%S]', time.localtime(int(timestamp) / 1000))
+
+    return build_response(session_attributes, build_speech_response(date_text, speech_output))
+
+
+def get_all(intent, session):
+    """ Get all kinds of data from DynamoDB
+    """
+
+    res = query()
+    session_attributes = {}
+
+    if len(res['Items']) is 0:
+        return build_response(session_attributes, build_no_data_response())
+
+    return_response = max(res["Items"], key=(lambda x: x["Timestamp"]))
+    latest_record = json.dumps(return_response, default=decimal_default)
+
+    json_obj = json.loads(latest_record)
+    timestamp = json_obj['Timestamp']
+    temperature = json_obj['payload']['Temperature']
+    temperature = str(int(temperature))
+    pressure = json_obj['payload']['Pressure']
+    pressure = str(int(pressure))
+    humidity = json_obj['payload']['Humidity']
+    humidity = str(int(humidity))
+
+    speech_output = 'The temperature is ' + temperature + ' degrees celsius and humidity is ' + \
+        humidity + ' percent. Finally, pressure is ' + pressure + ' hectopascal.'
+    date_text = time.strftime('[%Y-%m-%d %H:%M:%S]', time.localtime(int(timestamp) / 1000))
+
+    return build_response(session_attributes, build_speech_response(date_text, speech_output))
+
+
+def query():
+
+    now = time.time()
+    start = now - (24 * 60 * 60)  # 24 hours
+    now = str(int(now * 1000))
+    start = str(int(start * 1000))
+
+    dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
+    table = dynamodb.Table('SensorData')
+    return table.query(
+        KeyConditionExpression=Key('DeviceId').eq("esp32_E67D94") & Key('Timestamp').between(start, now),
+        ScanIndexForward=False,
+        Limit=1
+    )
 
 
 def build_speech_response(date_text, speech_output):
